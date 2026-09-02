@@ -1,0 +1,9 @@
+# 统一换行符，避免 Windows / Linux 之间来回切换时整库 diff
+* text=auto eol=lf
+
+# 二进制资源
+*.pdf binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

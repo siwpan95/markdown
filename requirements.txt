@@ -1,0 +1,33 @@
+# Markdown Viewer 运行依赖
+# 安装：pip install -r requirements.txt
+#
+# 说明：tkinter 由 Python 标准库提供，无需单独安装
+#       （部分 Linux 发行版需要额外安装 python3-tk 系统包）。
+
+# Markdown 解析
+Markdown>=3.6
+
+# 代码高亮（同时被渲染管线与导出的 HTML 使用）
+Pygments>=2.17
+
+# 默认渲染后端：把 HTML 转成 Tkinter Text 的富文本
+tkhtmlview>=0.3.2
+
+# tkhtmlview 的硬依赖：图片解码与网络图片下载
+Pillow>=9.0
+requests>=2.28
+
+# ---------------------------------------------------------------------------
+# 可选依赖（不安装也能正常运行，程序会自动降级）
+#
+# tkinterweb>=4.0
+#     增强渲染后端，使用 Tkhtml 内核，支持完整 CSS 2.1，表格/引用/提示块的
+#     表现明显更好。注意：它只提供 Tcl/Tk 8.6 的预编译二进制，
+#     在 Tcl/Tk 9（Python 3.13+ 常见）下无法使用，此时程序会自动回退到 tkhtmlview。
+#     安装后可用 `python main.py --list-backends` 确认是否真正生效。
+#
+# pymdown-extensions>=10.0
+#     Python-Markdown 的社区扩展集合。当前版本未强制依赖它
+#     （代码块高亮由 mdviewer.highlight 自行实现，任务列表由渲染器降级处理），
+#     如需更丰富的语法支持可自行安装。
+# ---------------------------------------------------------------------------

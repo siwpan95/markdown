@@ -1,0 +1,24 @@
+# Python 运行时产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 测试与运行期临时文件
+.pytest_cache/
+.coverage
+htmlcov/
+.mdviewer/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

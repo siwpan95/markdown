@@ -1,0 +1,64 @@
+{
+  "name": "@cordisjs/plugin-hmr",
+  "description": "Hot Module Replacement Plugin for Cordis",
+  "version": "1.0.15",
+  "type": "module",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
+  "author": "Shigma <shigma10826@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cordiverse/cordis.git",
+    "directory": "packages/hmr"
+  },
+  "bugs": {
+    "url": "https://github.com/cordiverse/cordis/issues"
+  },
+  "homepage": "https://cordis.io/",
+  "keywords": [
+    "cordis",
+    "plugin",
+    "hmr",
+    "hot",
+    "module",
+    "replacement",
+    "reload",
+    "watch",
+    "development"
+  ],
+  "cordis": {
+    "services": {
+      "required": [
+        "timer"
+      ]
+    },
+    "description": {
+      "en": "Hot Module Replacement",
+      "zh": "模块热替换"
+    }
+  },
+  "peerDependencies": {
+    "@cordisjs/plugin-timer": "^1.1.2",
+    "cordis": "^4.0.0-rc.8"
+  },
+  "devDependencies": {
+    "@cordisjs/plugin-include": "^1.0.4",
+    "@cordisjs/plugin-loader": "^1.0.0-rc.5",
+    "@cordisjs/plugin-timer": "^1.1.2",
+    "@types/babel__code-frame": "^7.27.0",
+    "@types/picomatch": "^3.0.2",
+    "cordis": "^4.0.0-rc.8",
+    "esbuild": "^0.27.3"
+  },
+  "dependencies": {
+    "@babel/code-frame": "^7.29.0",
+    "chokidar": "^4.0.3",
+    "cosmokit": "^1.8.1",
+    "picomatch": "^4.0.3",
+    "schemastery": "^3.18.0"
+  }
+}
