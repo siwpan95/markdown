@@ -46,6 +46,8 @@ class Context:
         own = self._own
         own[symbols.isolate] = ChainDict()
         own[symbols.intercept] = ChainDict()
+        #: 相对路径解析的基准目录（loader 用）；无 loader 时为项目根目录
+        own["base_url"] = None
         own["root"] = self
         own["fiber"] = Fiber(self, None, {}, None, build_outer_stack)
         own["reflect"] = ReflectService(self)
@@ -130,8 +132,13 @@ class Context:
         return self.reflect.accessor(name, get, set_, self)
 
     # ------------------------------------------------------------------ 插件
-    def plugin(self, plugin: Any, config: Any = None) -> Fiber:
-        return self.registry.plugin(plugin, config, self)
+    def plugin(
+        self,
+        plugin: Any,
+        config: Any = None,
+        get_outer_stack: Callable[[], list[str]] | None = None,
+    ) -> Fiber:
+        return self.registry.plugin(plugin, config, self, get_outer_stack)
 
     def inject(self, deps: InjectSpec, callback: Callable[..., Any]) -> Fiber:
         return self.registry.inject(deps, callback, self)

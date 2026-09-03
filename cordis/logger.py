@@ -30,7 +30,8 @@ class Logger:
             self._handler(level, message, self.name)
             return
         record = f"[{self.name}] {message}" if self.name else message
-        getattr(self._logging, "warn" if level == "warn" else level)(record)
+        # 注意：logging.warn 在 Python 3.14 已弃用，这里统一用 warning
+        getattr(self._logging, "warning" if level == "warn" else level)(record)
 
     def debug(self, *args: Any) -> None:
         self._emit("debug", *args)

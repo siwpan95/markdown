@@ -269,9 +269,23 @@ class ReflectService:
             fiber = fiber.parent.fiber
 
     def assign(self, ctx: "Context", name: str, value: Any) -> bool:
-        """处理 ``ctx.<name> = value``。"""
+        """处理 ``ctx.<name> = value``。
+
+        与上游 Proxy 的 ``set`` 保持一致的顺序：
+
+        1. 原型链上已经存在的普通属性（如 ``base_url``）→ 直接赋值；
+        2. 已声明的访问器 → 交给访问器；
+        3. 其余情况 → 在插件作用域里必须报错，在根上下文里允许自由赋值。
+        """
         prop = self.props.get(name)
         if prop is None:
+            try:
+                ctx._lookup_own(name)
+            except KeyError:
+                pass
+            else:
+                ctx._own[name] = value
+                return True
             if ctx.fiber.runtime is None:
                 ctx._own[name] = value
                 return True

@@ -28,12 +28,28 @@ class Symbol:
 
     __slots__ = ("_name",)
 
+    #: ``Symbol.for_name()`` 的全局登记表，语义同 JS 的 ``Symbol.for``
+    _registry: dict[str, "Symbol"] = {}
+
     def __init__(self, name: str) -> None:
         self._name = name
 
     @property
     def name(self) -> str:
         return self._name
+
+    @classmethod
+    def for_name(cls, name: str) -> "Symbol":
+        """取（或创建）一个全局共享的 symbol —— 等价于 JS 的 ``Symbol.for``。
+
+        需要跨模块指向同一个 key 时用这个（例如 loader 的 ``cordis.entry``
+        标记）；直接构造 :class:`Symbol` 则每次都是新的唯一值。
+        """
+        symbol = cls._registry.get(name)
+        if symbol is None:
+            symbol = cls(name)
+            cls._registry[name] = symbol
+        return symbol
 
     def __repr__(self) -> str:  # pragma: no cover - 调试辅助
         return f"Symbol({self._name!r})"

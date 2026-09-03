@@ -16,6 +16,7 @@
 
 - [架构总览](#架构总览)
 - [Cordis 速览](#cordis-速览)
+- [声明式装配与热替换](#声明式装配与热替换)
 - [功能特性](#功能特性)
 - [安装](#安装)
 - [使用方式](#使用方式)
@@ -54,15 +55,18 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
-装配只发生在一个地方——``mdviewer/app.py`` 的 ``create_context()``：
+装配只发生在一个地方——``mdviewer/app.py`` 的 ``create_context()``，且有两种模式：
 
 ```python
 ctx = Context()
-for service in SERVICE_ORDER:        # 6 个服务
+for service in SERVICE_ORDER:        # 6 个服务 + 3 个后端：始终代码装配
     ctx.plugin(service, config)
-for plugin in PLUGIN_ORDER:          # 3 个后端 + 9 个功能插件
+
+for plugin in FEATURE_PLUGINS:       # 模式一：内置默认顺序
     ctx.plugin(plugin)
-ctx.emit(events.APP_READY, initial_file)
+
+# 模式二：功能插件改由 loader 按配置文件声明式加载（--config）
+ctx.loader.load("cordis.example.yml")
 ```
 
 除此之外没有任何地方需要知道“系统里装了什么”。插件之间不互相 import，只
@@ -77,6 +81,8 @@ ctx.emit(events.APP_READY, initial_file)
 | 设置联动 | 手工调用 ``settings.save()`` 并同步各控件 | ``settings/change`` 事件广播 |
 | 插件卸载 | 不支持 | ``ctx.registry.delete(plugin)`` 完整回滚 |
 | 依赖顺序 | 靠代码顺序隐式保证 | ``inject`` 声明，运行时推导 |
+| 装配方式 | 代码里写死插件清单 | 代码装配 + **配置文件声明式装配**（`--config`） |
+| 改插件代码 | 关掉重启 | **热替换**（`--watch`），失败自动回滚 |
 
 ---
 
@@ -104,8 +110,8 @@ def apply(ctx, config):
 apply.inject = ["settings", "documents"]
 ```
 
-想读完整个运行时，看 ``cordis/`` 的 9 个文件即可（约 1500 行）。这里列出与
-TypeScript 上游的**已知差异**，都是语言机制所迫：
+想读完整个运行时，看 ``cordis/`` 的 12 个文件即可（约 2500 行，含 loader 与
+HMR）。这里列出与 TypeScript 上游的**已知差异**，都是语言机制所迫：
 
 | 差异 | 原因 | 位置 |
 | --- | --- | --- |
@@ -115,6 +121,68 @@ TypeScript 上游的**已知差异**，都是语言机制所迫：
 | ``parallel`` 汇总异常而非真并行 | 同上 | ``cordis/events.py`` |
 | ``thisArg`` 作为首个位置参数传入 | 无 ``this`` | ``cordis/events.py`` |
 | 未移植 ``shadow`` 追踪 | 本项目无多租户隔离需求，``isolate`` 已够用 | ``cordis/context.py`` |
+| loader 不支持任意表达式求值（``!!js/expr``） | 配置文件不是可信输入，只保留 ``$env`` 插值 | ``cordis/loader/utils.py`` |
+| HMR 用轮询 + 主线程调度，而非 chokidar | 零新依赖；Tkinter 只能在主线程碰控件 | ``cordis/hmr.py`` |
+
+---
+
+## 声明式装配与热替换
+
+上游 Cordis 有配套的 ``@cordisjs/plugin-loader`` 与 ``@cordisjs/plugin-hmr``，
+本仓库同样移植了这两件（``cordis/loader/`` + ``cordis/hmr.py``）。
+
+### 用配置文件装配
+
+```bash
+python main.py --config cordis.example.yml
+```
+
+功能插件的增删启停从此在配置文件里完成——服务与渲染后端仍是代码装配（它们是
+平台，不是可选项）。配置支持 ``.yml`` / ``.json`` / ``.toml``：
+
+```yaml
+- id: viewer
+  name: viewer            # 短名（见 app.py 的 _register_builtins）
+- id: find
+  name: mdviewer.plugins.find    # 也可以写完整模块路径
+  config:
+    nocase: true
+- id: off
+  name: toc
+  disabled: true          # 保留配置但停用
+- id: ui
+  name: cordis:group      # 分组：config 是一份子条目列表，可整体启停
+  config:
+    - id: toc
+      name: toc
+```
+
+运行时改配置只重建受影响的子树，其余插件状态原样保留：
+
+```python
+ctx.loader.update("toc", {"disabled": True})   # 停用目录侧栏
+ctx.loader.update("toc", {"config": {...}})    # 换配置，插件自动重启
+ctx.loader.create({"id": "x", "name": "viewer"})  # 运行时新增
+ctx.loader.remove("x")                          # 运行时移除
+```
+
+配置值支持 ``{"$env": ["VAR", "默认值"]}`` 取环境变量。**刻意不支持任意表达式
+求值**。另外注意 YAML 1.1 会把 ``on/off/yes/no`` 解析成布尔值，这类 id 要加
+引号（``id: "off"``），loader 检测到非字符串 id 会直接报错而不是静默换名。
+
+### 热替换
+
+```bash
+python main.py --watch     # 或与 --config 联用
+```
+
+改 ``mdviewer/plugins/*.py``、``mdviewer/services/*.py`` 里的代码，对应的插件
+会**在不重启窗口的前提下**被替换：旧 Fiber 的监听器、控件、定时器逆序清理，
+新代码以同样的配置重新加载。依赖链上的模块（``from x import y`` 的 ``x``）
+也会一起重载。任一步失败都会**回滚**到上一个可用版本，应用始终可用。
+
+线程模型：监听线程发现变化 → 攒够防抖窗口 → ``window.after(...)`` 切回 Tk
+主线程执行重载。``--watch`` 默认不开，避免生产误用。
 
 ---
 
@@ -199,6 +267,17 @@ python main.py --list-backends
 python main.py --list-plugins
 ```
 
+### 声明式装配
+
+用配置文件替代内置的功能插件清单：
+
+```bash
+python main.py --config cordis.example.yml
+python main.py --config cordis.example.yml --watch   # 附带热替换
+```
+
+配置格式见 [声明式装配与热替换](#声明式装配与热替换)。
+
 `--list-backends` 输出示例：
 
 ```
@@ -263,7 +342,9 @@ markdown/
 │   ├── events.py                emit / serial / bail / parallel / waterfall
 │   ├── service.py               服务基类
 │   ├── logger.py
-│   └── utils.py                 Symbol / DisposableList / ChainDict
+│   ├── utils.py                 Symbol / DisposableList / ChainDict
+│   ├── hmr.py                   模块热替换（依赖分析 / 原子回滚）
+│   └── loader/                  声明式装配（Entry / Group / Tree / Loader）
 │
 ├── mdviewer/
 │   ├── __init__.py              包入口（延迟导入 tkinter）
@@ -295,13 +376,17 @@ markdown/
 │   │   ├── auto_reload.py       文件变化自动重载
 │   │   ├── recent_files.py      最近打开列表
 │   │   ├── exporter.py          导出 HTML / 浏览器打开
+│   │   ├── hmr.py               开发期热替换（--watch 才注册）
 │   │   └── backend_*.py         三个内置渲染后端
 │   ├── backends/                后端实现（Base + 三个具体后端）
 │   └── widgets/                 目录 / 查找 / 状态栏控件
 │
+├── cordis.example.yml           声明式装配的示例配置
+│
 ├── tests/
 │   ├── test_cordis.py           Cordis 运行时单测（29 项，无 Tk 依赖）
-│   └── test_viewer.py           应用冒烟测试（22 项，含基线逐字节比对）
+│   ├── test_loader.py           loader / HMR 测试（28 项，含真实热替换）
+│   └── test_viewer.py           应用冒烟测试（31 项，含基线逐字节比对）
 │
 ├── cordis-main/                 上游 TypeScript 实现（参考，不参与构建）
 └── paper-main/                  《A Programming Paradigm for Spatiotemporal
@@ -332,6 +417,10 @@ apply.inject = ["documents"]
 
 然后在 ``mdviewer/plugins/__init__.py`` 的 :data:`FEATURE_PLUGINS` 里加一行。
 不需要改动任何既有文件。
+
+如果走配置文件装配，还可以把它登记成短名（``mdviewer/app.py`` 的
+``_register_builtins``），之后配置里写 ``name: word-count`` 即可启用——
+配合 ``--watch``，改插件代码立即生效，这就是最顺的开发循环。
 
 想给菜单加条目，订阅 ``menu/file`` / ``menu/view`` / ``menu/help`` 事件：
 
@@ -442,6 +531,10 @@ Windows 下 `~` 即 `%USERPROFILE%`。设置 `MDVIEWER_HOME` 环境变量可改�
   需要表格边框时请在浏览器中打开，或使用支持 CSS 的 `tkinterweb` 后端。
 - **嵌套引用块**：默认后端只处理最外层 `blockquote`，嵌套层级会被展平。
 - **超大文档**：为保证响应速度，超过 20 万字符的单个代码块会跳过着色。
+- **HMR 依赖图是近似的**：依赖关系从字节码里的 `IMPORT_NAME` / `IMPORT_FROM`
+  提取（因为 Python 不暴露 ESM 那样的模块链接表），函数体内的动态
+  ``importlib.import_module(...)`` 识别不到；改这类文件不会自动触发依赖方重载，
+  需要手动 `ctx.hmr.reload_plugin(...)`。
 
 ---
 
@@ -504,10 +597,15 @@ Windows 下 `~` 即 `%USERPROFILE%`。设置 `MDVIEWER_HOME` 环境变量可改�
 ## 测试
 
 ```bash
-python -m unittest discover -v          # 全部 51 项
+python -m unittest discover -v          # 全部 88 项
 python -m unittest tests.test_cordis -v # 只要 Cordis 运行时（无 Tk 依赖）
-python -m unittest tests.test_viewer -v # 应用冒烟测试
+python -m unittest tests.test_loader -v # loader / HMR（含真实热替换，无 Tk）
+python -m unittest tests.test_viewer -v # 应用冒烟测试（真实 Tk 窗口）
 ```
+
+`tests/test_loader.py` 里的 HMR 用例是真的在改磁盘上的文件：写坏代码 → 观察
+回滚、修好 → 观察恢复、连换三次 → 断言监听器数量不涨（无泄漏）。等待逻辑是
+事件驱动的（轮询 ``reload_count`` 而非死睡固定时长），因此不依赖机器快慢。
 
 `tests/test_viewer.py` 会跑真实的 Tk 窗口。所有与内容相关的期望值锚定在
 `tests/fixtures/sample.md`（**改它需要重新采集基线**），而不是 `README.md`

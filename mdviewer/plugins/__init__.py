@@ -27,7 +27,7 @@ from .viewer import apply as viewer
 #: 内置渲染后端（按优先级注册，创建时自动探测降级）
 BACKEND_PLUGINS = (backend_tkinterweb, backend_tkhtmlview, backend_plaintext)
 
-#: 功能插件
+#: 功能插件；``shell`` 必须最后（它广播菜单事件给其它插件）
 FEATURE_PLUGINS = (
     viewer,
     status,
@@ -37,10 +37,11 @@ FEATURE_PLUGINS = (
     auto_reload,
     recent_files,
     exporter,
+    shell,
 )
 
-#: 完整加载顺序；``shell`` 必须最后
-PLUGIN_ORDER = BACKEND_PLUGINS + FEATURE_PLUGINS + (shell,)
+#: 完整加载顺序 = 后端插件 + 功能插件
+PLUGIN_ORDER = BACKEND_PLUGINS + FEATURE_PLUGINS
 
 __all__ = [
     "BACKEND_PLUGINS",

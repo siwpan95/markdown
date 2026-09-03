@@ -129,8 +129,18 @@ class RegistryService:
         return list(self._internal.items())
 
     # ------------------------------------------------------------------ 注册
-    def plugin(self, plugin: Any, config: Any = None, ctx: "Any" = None) -> Fiber:
-        """加载一个插件，返回它的 Fiber。"""
+    def plugin(
+        self,
+        plugin: Any,
+        config: Any = None,
+        ctx: "Any" = None,
+        get_outer_stack: Callable[[], list[str]] | None = None,
+    ) -> Fiber:
+        """加载一个插件，返回它的 Fiber。
+
+        :param get_outer_stack: 出错时附加到异常上的调用栈。loader 会传
+            「哪个配置条目」，比框架内部的 Python 帧有用得多。
+        """
         ctx = ctx or self.ctx
         callback = self.resolve(plugin)
         if callback is None:
@@ -157,7 +167,9 @@ class RegistryService:
         else:
             inject_spec = resolve_inject(getattr(plugin, "inject", None))
 
-        return Fiber(ctx, config, inject_spec, runtime, build_outer_stack)
+        return Fiber(
+            ctx, config, inject_spec, runtime, get_outer_stack or build_outer_stack
+        )
 
     def inject(
         self, deps: InjectSpec, callback: Callable[..., Any], ctx: "Any" = None

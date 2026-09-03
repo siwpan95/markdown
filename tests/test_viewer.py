@@ -335,5 +335,143 @@ class TestExport(ViewerTestCase):
         )
 
 
+class TestConfigDrivenAssembly(ViewerTestCase):
+    """声明式装配：功能插件由配置文件驱动，而不是写死在代码里。"""
+
+    CONFIG = PROJECT_ROOT / "cordis.example.yml"
+
+    def setUp(self) -> None:
+        import tkinter as tk
+
+        from mdviewer import events
+        from mdviewer.app import create_context
+
+        self._home = tempfile.TemporaryDirectory(prefix="mdviewer-case-")
+        os.environ["MDVIEWER_HOME"] = self._home.name
+        self.events = events
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.ctx = create_context(self.root, config_file=self.CONFIG)
+        self.window = self.ctx.window
+
+    def test_all_feature_plugins_loaded(self):
+        ids = [entry.id for entry in self.ctx.loader.entries()]
+        self.assertEqual(
+            ids,
+            [
+                "viewer",
+                "status",
+                "find",
+                "toc",
+                "appearance",
+                "auto-reload",
+                "recent-files",
+                "exporter",
+                "shell",
+            ],
+        )
+        for name in (
+            "loader",
+            "settings",
+            "themes",
+            "documents",
+            "renderer",
+            "backends",
+            "window",
+        ):
+            self.assertIsNotNone(self.ctx.get(name), f"服务 {name} 未就绪")
+
+    def test_document_renders(self):
+        self.ready(str(SAMPLE))
+        self.assertEqual(self.ctx.backends.current.key, "tkhtmlview")
+        self.assertEqual(self.root.title(), "sample.md — Markdown Viewer")
+
+    def test_menu_built(self):
+        self.ready(str(SAMPLE))
+        for label in ("文件", "视图", "帮助"):
+            self.assertIn(label, self.ctx.window._menus)
+
+    def test_runtime_disable_and_enable(self):
+        self.ready(str(SAMPLE))
+        self.assertTrue(self.ctx.window.pane_visible("toc"))
+        self.ctx.loader.update("toc", {"disabled": True})
+        self.root.update()
+        self.assertFalse(self.ctx.window.pane_visible("toc"))
+        self.ctx.loader.update("toc", {"disabled": False})
+        self.root.update()
+        self.assertTrue(self.ctx.window.pane_visible("toc"))
+        self.assertEqual(self.ctx.loader.resolve("toc").fiber.state.name, "ACTIVE")
+
+    def test_remove_entry_unloads_plugin(self):
+        self.ready(str(SAMPLE))
+        hooks = self.ctx.events.hook_count()
+        self.ctx.loader.remove("status")
+        self.root.update()
+        self.assertLess(self.ctx.events.hook_count(), hooks)
+
+
+class TestHmrIntegration(ViewerTestCase):
+    """热替换挂在 Tk 主线程上（schedule = window.after）。"""
+
+    def setUp(self) -> None:
+        import tkinter as tk
+
+        from mdviewer import events
+        from mdviewer.app import create_context
+
+        self._home = tempfile.TemporaryDirectory(prefix="mdviewer-case-")
+        os.environ["MDVIEWER_HOME"] = self._home.name
+        self.events = events
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.ctx = create_context(self.root, watch=True)
+        self.window = self.ctx.window
+
+    def tearDown(self) -> None:
+        try:
+            if self.ctx.get("hmr") is not None:
+                self.ctx.hmr.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        super().tearDown()
+
+    def test_hmr_registered_with_main_thread_scheduler(self):
+        self.assertIsNotNone(self.ctx.get("hmr"))
+        # Tkinter 只能在主线程碰控件，重载必须走 window.after
+        self.assertEqual(self.ctx.hmr.schedule, self.ctx.window.after)
+
+    def test_watches_project_sources(self):
+        watched = {str(path) for path in self.ctx.hmr._iter_files()}
+        target = str((PROJECT_ROOT / "mdviewer" / "plugins" / "toc.py").resolve())
+        self.assertIn(target, watched)
+
+    def test_manual_reload_of_a_real_plugin(self):
+        """手动触发一次真实插件的热替换，验证窗口没被破坏。
+
+        注意：重载后旧的插件函数对象已被替换，``registry.get(toc)`` 会返回
+        None（registry 以函数对象为键），因此按 runtime 的 ``name`` 反查。
+        """
+        self.ready(str(SAMPLE))
+
+        def toc_runtime():
+            return next(
+                (rt for rt in self.ctx.registry.values() if rt.name == "toc"), None
+            )
+
+        before = toc_runtime()
+        self.assertIsNotNone(before)
+        old_uid = before.fibers[0].uid
+
+        from mdviewer.plugins import toc
+
+        self.assertTrue(self.ctx.hmr.reload_plugin(toc))
+
+        after = toc_runtime()
+        self.assertIsNotNone(after)
+        self.assertNotEqual(after.fibers[0].uid, old_uid)
+        self.root.update()
+        self.assertTrue(self.ctx.window.pane_visible("toc"))
+
+
 if __name__ == "__main__":
     unittest.main()

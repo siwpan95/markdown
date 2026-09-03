@@ -1,0 +1,63 @@
+# 声明式装配示例
+#
+# 用本文件启动：python main.py --config cordis.example.yml
+# 启用热替换：python main.py --config cordis.example.yml --watch
+#
+# 说明：
+#   * 服务（settings / themes / documents / renderer / window / backends）与
+#     渲染后端始终由代码装配，它们是平台，不在这里列。
+#   * 这里只声明「功能插件装哪些、怎么配」。
+#   * name 可以用短名（见 mdviewer/app.py 的 _register_builtins），
+#     也可以写完整的模块路径，如 mdviewer.plugins.toc。
+#   * 注意 YAML 1.1 会把 on / off / yes / no 解析成布尔值，这类 id 要加引号。
+
+- id: viewer
+  name: viewer
+
+- id: status
+  name: status
+
+- id: find
+  name: find
+
+- id: toc
+  name: toc
+
+- id: appearance
+  name: appearance
+
+- id: auto-reload
+  name: auto-reload
+
+- id: recent-files
+  name: recent-files
+
+- id: exporter
+  name: exporter
+
+# shell 必须放在最后：它建好菜单后会广播 menu/* 事件，
+# recent-files 之类的插件靠这个事件往菜单里加条目。
+- id: shell
+  name: shell
+
+# 下面是几种进阶写法的示例（默认注释掉，取消注释即可生效）：
+#
+# 1) 分组：把若干插件收进一个可整体启停的子树
+# - id: reading
+#   name: cordis:group
+#   config:
+#     - id: toc
+#       name: toc
+#     - id: find
+#       name: find
+#
+# 2) 临时停用某个插件（保留配置，不删除条目）
+# - id: toc
+#   name: toc
+#   disabled: true
+#
+# 3) 用环境变量注入配置（支持默认值）
+# - id: exporter
+#   name: exporter
+#   config:
+#     preview_dir: { "$env": ["MDVIEWER_PREVIEW", "~/.mdviewer/preview"] }

@@ -86,6 +86,9 @@ class Fiber:
         self.state = FiberState.PENDING
         self.store: dict[str, Any] | None = None
         self.uid: int | None = None
+        #: 由 :mod:`cordis.loader` 填充：本 Fiber 属于哪个配置条目。
+        #: 不使用 loader 时恒为 ``None``。
+        self.entry: Any = None
 
         self._hooks: dict[str, DisposableList] = {}
         self._disposables = DisposableList()
@@ -377,11 +380,14 @@ class Fiber:
         self._refresh()
         return self.await_()
 
-    def update(self, config: Any) -> "Fiber":
+    def update(self, config: Any, no_save: bool = False) -> "Fiber":
         """用新配置重启插件。
 
         配置变更走 :func:`~cordis.events.EventsService.waterfall` 的
         ``internal/update`` 钩子，插件可以用它在保存前做校验或改写。
+
+        :param no_save: 为 ``True`` 时表示「这是由配置驱动的更新」，loader
+            不应把它再写回配置文件（否则会形成回环）。
         """
         if self.runtime is None:
             raise CordisError("INVALID_TARGET", "cannot update the root fiber")
@@ -392,7 +398,7 @@ class Fiber:
             self._error = None
             self.restart()
 
-        self.ctx.waterfall(self, "internal/update", resolved, False, commit)
+        self.ctx.waterfall(self, "internal/update", resolved, no_save, commit)
         return self.await_()
 
 

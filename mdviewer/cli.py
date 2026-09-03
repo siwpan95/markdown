@@ -40,6 +40,16 @@ def build_parser() -> argparse.ArgumentParser:
     info.add_argument(
         "--list-plugins", action="store_true", help="列出已注册的插件与依赖"
     )
+
+    advanced = parser.add_argument_group("声明式装配")
+    advanced.add_argument(
+        "--config",
+        metavar="FILE",
+        help="用配置文件（yml / json / toml）装配功能插件，替代内置默认顺序",
+    )
+    advanced.add_argument(
+        "--watch", action="store_true", help="启用热替换：改插件代码后自动重载（开发用）"
+    )
     return parser
 
 
@@ -128,7 +138,10 @@ def main(argv: list[str] | None = None) -> int:
 
     from .app import main as gui_main
 
-    return gui_main(args.file)
+    if args.watch:
+        print("热替换已启用：改动 mdviewer/ 下的 .py 文件会自动重载对应插件")
+
+    return gui_main(args.file, config_file=args.config, watch=args.watch)
 
 
 if __name__ == "__main__":
